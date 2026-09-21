@@ -11,7 +11,7 @@ using GameLevel = Il2Cpp.PlayerLevel;
 using GameDash = Il2Cpp.PlayerDashCharges;
 using GameEnemies = Il2Cpp.EnemyRegistry;
 
-[assembly: MelonInfo(typeof(GoNextTrainer.Trainer), "Go Next Trainer", "1.2.0", "local")]
+[assembly: MelonInfo(typeof(GoNextTrainer.Trainer), "Go Next Trainer", "1.3.0", "local")]
 [assembly: MelonGame("Go Next demo", "Go Next demo")]
 
 namespace GoNextTrainer
@@ -31,7 +31,7 @@ namespace GoNextTrainer
         public const int F1 = 0x70, F2 = 0x71, F3 = 0x72, F4 = 0x73;
         public const int F5 = 0x74, F6 = 0x75, F7 = 0x76, F8 = 0x77;
         public const int F9 = 0x78, F10 = 0x79, F11 = 0x7A, F12 = 0x7B;
-        public const int Insert = 0x2D;
+        public const int Insert = 0x2D, Delete = 0x2E;
         public const int PageUp = 0x21, PageDown = 0x22;
         public const int Home = 0x24, End = 0x23;
         public const int Ctrl = 0x11;
@@ -74,8 +74,15 @@ namespace GoNextTrainer
     public class Trainer : MelonMod
     {
         private Toggle _god, _damage, _dash, _speed, _magnet, _jumps, _luck;
-        private Toggle _fireRate, _pierce, _lifesteal;
+        private Toggle _fireRate, _pierce, _lifesteal, _autoKill;
         private readonly List<Toggle> _toggles = new List<Toggle>();
+
+        /// <summary>Auto-kill sweeps on a timer, not every frame: walking the
+        /// registry through IL2CPP interop 200+ times a second is pure overhead,
+        /// and a quarter-second delay reads as instant in game.</summary>
+        private const float AutoKillInterval = 0.25f;
+        private float _autoKillNext;
+        private int _autoKilled;
 
         private float _damageMult = 50f;
         private float _speedMult = 2.5f;
@@ -98,6 +105,7 @@ namespace GoNextTrainer
             _fireRate = Add("Fire rate", Keys.F8, "F8");
             _pierce = Add("Pierce", Keys.Home, "Home");
             _lifesteal = Add("Lifesteal", Keys.End, "End");
+            _autoKill = Add("Auto-kill enemies", Keys.Delete, "Del");
 
             LoggerInstance.Msg("Go Next Trainer loaded. Press Insert to show/hide the menu.");
         }
@@ -151,6 +159,7 @@ namespace GoNextTrainer
                 if (Keys.Down(t.Key))
                 {
                     t.On = !t.On;
+                    if (t == _autoKill && t.On) { _autoKilled = 0; _autoKillNext = 0f; }
                     Flash(t.Name + (t.On ? ": ON" : ": OFF"));
                 }
             }
@@ -223,6 +232,12 @@ namespace GoNextTrainer
                 var d = SafeDash();
                 if (d != null && d.Charges < d.MaxCharges) d.Charges = d.MaxCharges;
             }
+
+            if (_autoKill.On && Time.realtimeSinceStartup >= _autoKillNext)
+            {
+                _autoKillNext = Time.realtimeSinceStartup + AutoKillInterval;
+                _autoKilled += KillEnemies(false);
+            }
         }
 
         private static GameStats SafeStats() { try { return GameStats.Instance; } catch { return null; } }
@@ -267,10 +282,21 @@ namespace GoNextTrainer
 
         private void KillAll()
         {
+            Flash("Enemies killed: " + KillEnemies(true));
+        }
+
+        /// <summary>
+        /// Damage rather than Die(): TakeDamage is the path the game itself uses,
+        /// so gold, souls and XP drop exactly as if the player landed the hit.
+        /// Props (crates and the like) are only swept by the F11 action —
+        /// the auto sweep would pop every one in the level on spawn.
+        /// </summary>
+        private int KillEnemies(bool includeProps)
+        {
             try
             {
                 var all = GameEnemies.All;
-                if (all == null) { Flash("No enemies"); return; }
+                if (all == null) return 0;
 
                 // the live list mutates as enemies die, so snapshot it first
                 var snapshot = new List<Il2Cpp.EnemyRobot>();
@@ -286,14 +312,19 @@ namespace GoNextTrainer
                     try
                     {
                         if (e.dead) continue;
+                        if (!includeProps && e.IsProp) continue;
                         e.TakeDamage(1000000.0);
                         killed++;
                     }
                     catch { }
                 }
-                Flash("Enemies killed: " + killed);
+                return killed;
             }
-            catch (Exception e) { LoggerInstance.Warning("KillAll: " + e.Message); }
+            catch (Exception e)
+            {
+                LoggerInstance.Warning("KillEnemies: " + e.Message);
+                return 0;
+            }
         }
 
         // GUILayout is stripped from this IL2CPP build (Method unstripping failed),
@@ -321,6 +352,7 @@ namespace GoNextTrainer
             if (!_menu) return;
 
             int lines = _netBlocked ? 2 : (_toggles.Count + 6);
+            if (!_netBlocked && _autoKill.On) lines++;
             if (!string.IsNullOrEmpty(_flash) && Time.realtimeSinceStartup < _flashUntil) lines++;
             int h = 16 + (lines + 1) * LineH;
 
@@ -343,6 +375,9 @@ namespace GoNextTrainer
                 Line("PgUp / PgDn — damage,  Ctrl + PgUp / PgDn — speed", ColText);
                 Line("[F9] +10000 gold     [F10] +1 level", ColText);
                 Line("[F11] kill all       [F12] full heal", ColText);
+
+                if (_autoKill.On)
+                    Line($"Auto-kill: {_autoKilled} killed  (every {AutoKillInterval}s, props skipped)", ColOn);
             }
 
             if (!string.IsNullOrEmpty(_flash) && Time.realtimeSinceStartup < _flashUntil)

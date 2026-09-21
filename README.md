@@ -68,6 +68,7 @@ Press `Insert` to show or hide the overlay.
 | `F8` | Fire rate | `fireRateMult` |
 | `Home` | Pierce | `projectilePierces = 99` |
 | `End` | Lifesteal | `lifestealFraction = 1.0` |
+| `Del` | Auto-kill enemies | calls `EnemyRobot.TakeDamage` for you every 0.25s |
 
 ### Adjusters
 
@@ -82,11 +83,28 @@ Press `Insert` to show or hide the overlay.
 |---|---|
 | `F9` | +10000 gold |
 | `F10` | +1 level |
-| `F11` | kill every enemy on the map |
+| `F11` | kill every enemy and prop on the map (once) |
 | `F12` | full heal |
 
 Toggles and actions only do something during a run. Outside one the overlay reports
 "not in a run" and nothing breaks.
+
+### Auto-kill (`Del`)
+
+`F11`, but it presses itself: while the toggle is on the mod walks `EnemyRegistry.All` four times
+a second and finishes off everything alive. Enemies die almost as they spawn, and gold, souls and
+XP drop as they would from a normal kill — the damage goes through the game's own
+`EnemyRobot.TakeDamage` rather than `Die()`.
+
+Two things it does differently from one-shot `F11`:
+
+- **It leaves props alone.** Crates and anything else flagged `IsProp` are skipped, otherwise the
+  whole level would burst the moment it loads, fireworks included. `F11` still clears them.
+- **It runs on a timer, not every frame.** Walking the registry through IL2CPP interop 200 times a
+  second is pure overhead, and a quarter of a second reads as instant in game.
+
+The overlay shows a running kill count, reset every time you switch the toggle on. In a network
+session auto-kill is disabled along with every other cheat.
 
 ---
 
