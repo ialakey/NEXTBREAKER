@@ -1,0 +1,11 @@
+# build output
+bin/
+obj/
+*.user
+
+# third-party binary, fetch from NuGet (see README)
+tools/Mono.Cecil.dll
+
+# save-editor backups are machine-specific
+cheat-backups/
+*.reg
