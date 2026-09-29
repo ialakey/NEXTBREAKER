@@ -44,6 +44,8 @@
    работать не будет:
    ```powershell
    .\tools\fix-coremodule.ps1
+   # если Steam-библиотека не найдена автоматически:
+   .\tools\fix-coremodule.ps1 -GameDir "D:\SteamLibrary\steamapps\common\Go Next! Demo"
    ```
 4. Собери мод (см. [Сборка](#сборка)) или положи готовый `GoNextTrainer.dll` в `Mods\`.
 5. Запускай игру. В `MelonLoader\Latest.log` должна появиться строка `Support Module Loaded`.
@@ -171,8 +173,8 @@ BadImageFormatException: Duplicate type with name '<>O'
 `UnityEngine.CoreModule.dll.orig`, состояние отслеживается по хешу — повторный запуск ничего
 не делает.
 
-Рядом с `tools/fix-coremodule.ps1` должен лежать `Mono.Cecil.dll` — возьми его с
-[NuGet](https://www.nuget.org/packages/Mono.Cecil) (`lib/net40/Mono.Cecil.dll`).
+Скрипт сначала ищет `Mono.Cecil.dll` рядом с собой и в локальном NuGet cache. Если библиотеки нет,
+он сам скачает Mono.Cecil 0.11.6 с NuGet в локальный cache NEXTBREAKER.
 
 **Запускай это после каждого обновления в Steam**: игра патчится, MelonLoader перегенерирует
 обёртки, и дефект возвращается.
