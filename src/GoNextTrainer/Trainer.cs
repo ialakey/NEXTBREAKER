@@ -11,7 +11,7 @@ using GameLevel = Il2Cpp.PlayerLevel;
 using GameDash = Il2Cpp.PlayerDashCharges;
 using GameEnemies = Il2Cpp.EnemyRegistry;
 
-[assembly: MelonInfo(typeof(GoNextTrainer.Trainer), "Go Next Trainer", "1.4.1", "local")]
+[assembly: MelonInfo(typeof(GoNextTrainer.Trainer), "Go Next Trainer", "1.5.0", "local")]
 [assembly: MelonGame("Go Next demo", "Go Next demo")]
 
 namespace GoNextTrainer
@@ -36,6 +36,7 @@ namespace GoNextTrainer
         public const int Home = 0x24, End = 0x23;
         public const int Ctrl = 0x11;
         public const int LeftBracket = 0xDB, RightBracket = 0xDD;
+        public const int Backspace = 0x08;
 
         /// <summary>Fires once per press instead of every frame the key is held.</summary>
         public static bool Down(int vk)
@@ -182,8 +183,15 @@ namespace GoNextTrainer
             if (Keys.Down(Keys.F10)) GiveLevel();
             if (Keys.Down(Keys.F11)) KillAll();
             if (Keys.Down(Keys.F12)) FullHeal();
-            if (Keys.Down(Keys.RightBracket)) ChangeKills(50000);
-            if (Keys.Down(Keys.LeftBracket)) ChangeKills(-50000);
+            if (Keys.Down(Keys.RightBracket))
+            {
+                if (ctrl) ChangeTimer(300f); else ChangeKills(50000);
+            }
+            if (Keys.Down(Keys.LeftBracket))
+            {
+                if (ctrl) ChangeTimer(-300f); else ChangeKills(-50000);
+            }
+            if (Keys.Down(Keys.Backspace) && ctrl) EndRun();
         }
 
         /// <summary>
@@ -245,6 +253,56 @@ namespace GoNextTrainer
 
         private static GameStats SafeStats() { try { return GameStats.Instance; } catch { return null; } }
         private static GameDash SafeDash() { try { return GameDash.Instance; } catch { return null; } }
+
+        private bool ActiveSoloRun()
+        {
+            if (NetworkActive()) return false;
+            var health = GameHealth.Instance;
+            return health != null && !health.IsDead && SafeStats() != null;
+        }
+
+        private void ChangeTimer(float seconds)
+        {
+            try
+            {
+                var timer = Il2Cpp.GameTimer.Instance;
+                if (!ActiveSoloRun() || timer == null) { Flash("Timer: not in a live solo run"); return; }
+                float elapsed = timer.Elapsed;
+                if (float.IsNaN(elapsed) || float.IsInfinity(elapsed))
+                {
+                    Flash("Timer: invalid current value");
+                    return;
+                }
+                timer.Elapsed = Math.Max(0f, elapsed + seconds);
+                // Let the game's next Update refresh its timer text and threshold logic.
+                timer._lastSec = -1;
+                timer._lastMin = -1;
+                Flash("Map timer: " + timer.Elapsed.ToString("F0") + " sec");
+            }
+            catch (Exception e) { LoggerInstance.Warning("ChangeTimer: " + e.Message); }
+        }
+
+        private void EndRun()
+        {
+            try
+            {
+                if (!ActiveSoloRun()) { Flash("End run: not in a live solo run"); return; }
+                var health = GameHealth.Instance;
+                var stats = SafeStats();
+                foreach (var toggle in _toggles) toggle.On = false;
+                GameHealth.GodMode = false;
+                stats.incomingDamageMult = 1f;
+                stats.damageReductionMult = 1f;
+                stats.revivePending = false;
+                health.invulnerableUntil = 0f;
+                health.currentShield = 0f;
+                health.currentHealth = 1;
+                // Use the native damage/death flow so the game runs its normal end screen.
+                health.TakeDamage(1000000, null, true, true);
+                Flash(health.IsDead ? "Run ended" : "Death prevented by game; try again");
+            }
+            catch (Exception e) { LoggerInstance.Warning("EndRun: " + e.Message); }
+        }
 
         private void ChangeKills(int amount)
         {
@@ -367,7 +425,7 @@ namespace GoNextTrainer
         {
             if (!_menu) return;
 
-            int lines = _netBlocked ? 2 : (_toggles.Count + 7);
+            int lines = _netBlocked ? 2 : (_toggles.Count + 9);
             if (!_netBlocked && _autoKill.On) lines++;
             if (!string.IsNullOrEmpty(_flash) && Time.realtimeSinceStartup < _flashUntil) lines++;
             int h = 16 + (lines + 1) * LineH;
@@ -392,6 +450,8 @@ namespace GoNextTrainer
                 Line("[F9] +10000 gold     [F10] +1 level", ColText);
                 Line("[F11] kill all       [F12] full heal", ColText);
                 Line("Kills: [ -50,000    ] +50,000", ColHint);
+                Line("Timer: Ctrl+[ -5m   Ctrl+] +5m", ColHint);
+                Line("Ctrl+Backspace: die / end run", ColWarn);
 
                 if (_autoKill.On)
                     Line($"Auto-kill: {_autoKilled} killed  (every {AutoKillInterval}s, props skipped)", ColOn);
