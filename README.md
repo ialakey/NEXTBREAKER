@@ -85,9 +85,23 @@ Press `Insert` to show or hide the overlay.
 | `F10` | +1 level |
 | `F11` | kill every enemy and prop on the map (once) |
 | `F12` | full heal |
+| `Num +` | add 50,000 to the current run's kill count |
+| `Num -` | subtract 50,000 from the current run's kill count (minimum 0) |
 
 Toggles and actions only do something during a run. Outside one the overlay reports
 "not in a run" and nothing breaks.
+
+### Kill counter (v1.4.0)
+
+Use the numeric keypad `+` and `-` keys during a solo run. Each press changes
+`RunSession.Kills` once; holding a key does not repeat the change. The overlay displays
+the resulting count briefly. Values are limited to 0–2,147,483,647 to prevent overflow.
+These actions change the run counter directly without killing enemies or granting their
+gold or XP. They do not change the separate auto-kill tally and are disabled in co-op.
+
+To update, close the game, rebuild Release, and replace `Mods/GoNextTrainer.dll`.
+Version 1.4.0 has been build-checked against the local game assemblies; the new controls
+still need an in-game check.
 
 ### Auto-kill (`Del`)
 

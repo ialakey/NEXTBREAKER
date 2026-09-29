@@ -11,7 +11,7 @@ using GameLevel = Il2Cpp.PlayerLevel;
 using GameDash = Il2Cpp.PlayerDashCharges;
 using GameEnemies = Il2Cpp.EnemyRegistry;
 
-[assembly: MelonInfo(typeof(GoNextTrainer.Trainer), "Go Next Trainer", "1.3.0", "local")]
+[assembly: MelonInfo(typeof(GoNextTrainer.Trainer), "Go Next Trainer", "1.4.0", "local")]
 [assembly: MelonGame("Go Next demo", "Go Next demo")]
 
 namespace GoNextTrainer
@@ -35,6 +35,7 @@ namespace GoNextTrainer
         public const int PageUp = 0x21, PageDown = 0x22;
         public const int Home = 0x24, End = 0x23;
         public const int Ctrl = 0x11;
+        public const int NumAdd = 0x6B, NumSubtract = 0x6D;
 
         /// <summary>Fires once per press instead of every frame the key is held.</summary>
         public static bool Down(int vk)
@@ -181,6 +182,8 @@ namespace GoNextTrainer
             if (Keys.Down(Keys.F10)) GiveLevel();
             if (Keys.Down(Keys.F11)) KillAll();
             if (Keys.Down(Keys.F12)) FullHeal();
+            if (Keys.Down(Keys.NumAdd)) ChangeKills(50000);
+            if (Keys.Down(Keys.NumSubtract)) ChangeKills(-50000);
         }
 
         /// <summary>
@@ -242,6 +245,19 @@ namespace GoNextTrainer
 
         private static GameStats SafeStats() { try { return GameStats.Instance; } catch { return null; } }
         private static GameDash SafeDash() { try { return GameDash.Instance; } catch { return null; } }
+
+        private void ChangeKills(int amount)
+        {
+            try
+            {
+                if (SafeStats() == null) { Flash("Kills: not in a run"); return; }
+                // Use a wider intermediate to avoid overflow near Int32.MaxValue.
+                long next = (long)Il2Cpp.RunSession.Kills + amount;
+                Il2Cpp.RunSession.Kills = (int)Math.Max(0L, Math.Min(int.MaxValue, next));
+                Flash("Run kills: " + Il2Cpp.RunSession.Kills.ToString("N0"));
+            }
+            catch (Exception e) { LoggerInstance.Warning("ChangeKills: " + e.Message); }
+        }
 
         private void GiveGold(int amount)
         {
@@ -351,7 +367,7 @@ namespace GoNextTrainer
         {
             if (!_menu) return;
 
-            int lines = _netBlocked ? 2 : (_toggles.Count + 6);
+            int lines = _netBlocked ? 2 : (_toggles.Count + 7);
             if (!_netBlocked && _autoKill.On) lines++;
             if (!string.IsNullOrEmpty(_flash) && Time.realtimeSinceStartup < _flashUntil) lines++;
             int h = 16 + (lines + 1) * LineH;
@@ -375,6 +391,7 @@ namespace GoNextTrainer
                 Line("PgUp / PgDn — damage,  Ctrl + PgUp / PgDn — speed", ColText);
                 Line("[F9] +10000 gold     [F10] +1 level", ColText);
                 Line("[F11] kill all       [F12] full heal", ColText);
+                Line("[Num + / -] Run kills +/- 50,000", ColHint);
 
                 if (_autoKill.On)
                     Line($"Auto-kill: {_autoKilled} killed  (every {AutoKillInterval}s, props skipped)", ColOn);
