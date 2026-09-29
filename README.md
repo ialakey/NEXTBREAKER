@@ -1,5 +1,42 @@
 # NEXTBREAKER
 
+## Version 1.6.0: automatic CoreModule repair and custom steps
+
+Install `GoNextCoreRepair.dll` into **Plugins/** and `GoNextTrainer.dll` into **Mods/**
+with the game closed. The packaged `Install-NEXTBREAKER.ps1` installs both DLLs,
+backs up previous versions and verifies the copied files.
+
+The repair plugin uses MelonLoader 0.7.3's `OnPreModsLoaded` callback, after assembly
+generation and before mod loading. It rewrites the generated CoreModule with the
+loader's bundled Mono.Cecil, preserves `.orig`, and records the repaired SHA-256.
+Regeneration changes the hash and triggers repair again. Matching files are left alone.
+This addresses the known duplicate-type generation bug; unrelated loader errors still
+need diagnosis. The plugin references no Unity/game assemblies during early loading.
+
+Step sizes are read from `UserData/GoNextTrainer.steps.cfg` on each bracket key press:
+
+```ini
+KillStep=50000
+TimeStepSeconds=300
+```
+
+Set any positive whole-number kill step up to 2,147,483,647 and any positive time
+step up to 86,400 seconds (decimal point allowed). Invalid settings retain the last
+valid value. `[` / `]` subtract/add the kill step; `Ctrl` + `[` / `]` adjusts time.
+Hold **Shift** for a step of **1 kill**, or **Ctrl + Shift** for **1 second**.
+Time and kills stay nonnegative. These settings provide precise manual control;
+they do not guarantee leaderboard acceptance or protection from bans.
+
+Build the repair plugin with:
+
+```powershell
+dotnet build src/GoNextCoreRepair -c Release -p:GameDir="D:\SteamLibrary\steamapps\common\Go Next! Demo"
+```
+
+The repair was tested on a copy of the malformed assembly: initial repair, CLR
+loading, no-op repeat, backup preservation and repair after simulated regeneration.
+Full in-game loading still needs verification after installation.
+
 **Break the run.** God mode, mega damage, infinite everything — an in-game trainer and save
 unlocker for **Go Next! Demo** (Steam app `5066300`), a Unity 6000.4 / IL2CPP game.
 
@@ -85,10 +122,12 @@ Press `Insert` to show or hide the overlay.
 | `F10` | +1 level |
 | `F11` | kill every enemy and prop on the map (once) |
 | `F12` | full heal |
-| `]` | add 50,000 to the current run's kill count |
-| `[` | subtract 50,000 from the current run's kill count (minimum 0) |
-| `Ctrl` + `]` | advance the current map timer by 5 minutes |
-| `Ctrl` + `[` | rewind the current map timer by 5 minutes (minimum 0) |
+| `]` | add the configured kill step (default 50,000) |
+| `[` | subtract the configured kill step (minimum 0) |
+| `Ctrl` + `]` | advance the map timer by the configured step (default 5 minutes) |
+| `Ctrl` + `[` | rewind the map timer by the configured step (minimum 0) |
+| `Shift` + `[` / `]` | subtract/add 1 kill |
+| `Ctrl` + `Shift` + `[` / `]` | subtract/add 1 second |
 | `Ctrl` + `Backspace` | disable trainer toggles and end the run through lethal damage |
 
 Toggles and actions only do something during a run. Outside one the overlay reports
@@ -97,7 +136,7 @@ Toggles and actions only do something during a run. Outside one the overlay repo
 ### Timer and end-run controls (v1.5.0)
 
 `Ctrl` + `[` / `]` changes `GameTimer.Elapsed` by 300 seconds per press during a
-live solo run. Holding the key does not repeat. These combinations do not also change
+live solo run by default; the step is configurable. Holding the key does not repeat. These combinations do not also change
 the kill counter. The timer on the current map is adjusted; banked time from earlier
 maps is left intact. Advancing time can trigger the game's difficulty thresholds;
 rewinding does not undo enemies or events that already happened.
@@ -117,7 +156,7 @@ These actions change the run counter directly without killing enemies or grantin
 gold or XP. They do not change the separate auto-kill tally and are disabled in co-op.
 
 To update, close the game, rebuild Release, and replace `Mods/GoNextTrainer.dll`.
-Version 1.5.0 has been build-checked against the local game assemblies; the new controls
+Version 1.6.0 has been build-checked against the local game assemblies; the new controls
 still need an in-game check.
 
 ### Auto-kill (`Del`)
@@ -204,8 +243,8 @@ its object model, so the malformed entries are dropped. The original is kept as
 `tools/fix-coremodule.ps1` needs `Mono.Cecil.dll` next to it — grab it from
 [NuGet](https://www.nuget.org/packages/Mono.Cecil) (`lib/net40/Mono.Cecil.dll`).
 
-**Re-run this after every Steam update**: the game gets patched, MelonLoader regenerates the
-wrappers, and the defect comes back.
+Without `GoNextCoreRepair.dll`, re-run the script after Steam updates that regenerate
+the wrappers. With the repair plugin installed, this known defect is repaired automatically.
 
 ### Save edits did not apply
 
