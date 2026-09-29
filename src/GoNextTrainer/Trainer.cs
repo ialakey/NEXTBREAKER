@@ -14,7 +14,7 @@ using GameLevel = Il2Cpp.PlayerLevel;
 using GameDash = Il2Cpp.PlayerDashCharges;
 using GameEnemies = Il2Cpp.EnemyRegistry;
 
-[assembly: MelonInfo(typeof(GoNextTrainer.Trainer), "Go Next Trainer", "1.7.0", "local")]
+[assembly: MelonInfo(typeof(GoNextTrainer.Trainer), "Go Next Trainer", "1.8.0", "local")]
 [assembly: MelonGame("Go Next demo", "Go Next demo")]
 
 namespace GoNextTrainer
@@ -101,6 +101,10 @@ namespace GoNextTrainer
         private bool _menu = true;
         private int _killStep = 50000;
         private float _timeStep = 300f;
+        private bool _autoItems = true;
+        private int _itemTarget, _itemRunId, _itemCursor;
+        private string _itemStatus = "Auto items: ready";
+        private const int MaxAutoItems = 1000;
         private string StepsPath => Path.Combine(MelonLoader.Utils.MelonEnvironment.UserDataDirectory, "GoNextTrainer.steps.cfg");
 
         private void LoadSteps()
@@ -110,12 +114,14 @@ namespace GoNextTrainer
                 if (!File.Exists(StepsPath))
                 {
                     Directory.CreateDirectory(Path.GetDirectoryName(StepsPath));
-                    File.WriteAllText(StepsPath, "KillStep=50000\nTimeStepSeconds=300\n");
+                    File.WriteAllText(StepsPath, "KillStep=50000\nTimeStepSeconds=300\nAutoItems=true\n");
                 }
                 foreach (string line in File.ReadAllLines(StepsPath))
                 {
                     string[] pair = line.Split('=');
                     if (pair.Length != 2) continue;
+                    if (pair[0].Trim() == "AutoItems" && bool.TryParse(pair[1].Trim(), out bool autoItems))
+                        _autoItems = autoItems;
                     if (pair[0].Trim() == "KillStep" && int.TryParse(pair[1].Trim(), out int kills) && kills > 0)
                         _killStep = kills;
                     if (pair[0].Trim() == "TimeStepSeconds" && float.TryParse(pair[1].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out float seconds)
@@ -187,6 +193,7 @@ namespace GoNextTrainer
             bool net = NetworkActive();
             if (net && !_netBlocked)
             {
+                _itemTarget = 0;
                 foreach (var t in _toggles) t.On = false;
                 Flash("Network session — cheats disabled");
             }
@@ -234,6 +241,7 @@ namespace GoNextTrainer
                 bool fine = Keys.IsDown(Keys.Shift);
                 if (ctrl) ChangeTimer(fine ? -1f : -_timeStep); else ChangeKills(fine ? -1 : -_killStep);
             }
+            ProcessAutoItems();
             if (Keys.Down(Keys.Backspace) && ctrl) EndRun();
         }
 
@@ -315,6 +323,85 @@ namespace GoNextTrainer
             return health != null && !health.IsDead && SafeStats() != null;
         }
 
+        private void QueueAutoItems()
+        {
+            if (!_autoItems) { _itemTarget = 0; _itemStatus = "Auto items: off"; return; }
+            try
+            {
+                if (!ActiveSoloRun()) { _itemTarget = 0; return; }
+                float time = Il2Cpp.RunSession.TotalTimeSec;
+                if (float.IsNaN(time) || float.IsInfinity(time) || time < 0f) return;
+                int required = Il2Cpp.Leaderboard.MinItemsFor(Il2Cpp.RunSession.Kills, time);
+                _itemRunId = Il2Cpp.RunSession.RunId;
+                _itemTarget = Math.Max(0, Math.Min(MaxAutoItems, required));
+                _itemStatus = required > MaxAutoItems ? "Auto items: capped at 1,000" : "Auto items: preparing";
+                if (required > MaxAutoItems) LoggerInstance.Warning("Auto items: requested " + required + "; limited to " + MaxAutoItems);
+            }
+            catch (Exception e)
+            {
+                _itemTarget = 0;
+                _itemStatus = "Auto items: unavailable (see log)";
+                LoggerInstance.Warning("QueueAutoItems: " + e.Message);
+            }
+        }
+
+        private void ProcessAutoItems()
+        {
+            if (_itemTarget <= 0) return;
+            try
+            {
+                if (!_autoItems || !ActiveSoloRun() || Il2Cpp.RunSession.RunId != _itemRunId)
+                { _itemTarget = 0; _itemStatus = "Auto items: idle"; return; }
+                var inventory = Il2Cpp.ItemInventory.Instance;
+                if (inventory == null || inventory.Owned == null)
+                { _itemTarget = 0; _itemStatus = "Auto items: inventory unavailable"; return; }
+                int catalogueSize = Il2Cpp.ChestItems.Count;
+                // Limit work per frame; do not duplicate inventory entries or invoke OnAcquire manually.
+                for (int batch = 0; batch < 4 && inventory.Owned.Count < _itemTarget; batch++)
+                {
+                    Il2Cpp.ItemDef selected = null;
+                    for (int attempt = 0; attempt < catalogueSize; attempt++)
+                    {
+                        _itemCursor %= catalogueSize;
+                        var candidate = Il2Cpp.ChestItems.Get(_itemCursor++);
+                        if (candidate == null || string.IsNullOrEmpty(candidate.Name)) continue;
+                        if (!Il2Cpp.PlayerUnlocks.IsItemUnlocked(candidate.Name)) continue;
+                        if (!Il2Cpp.RunContentFilter.IsItemEnabled(candidate.Name)) continue;
+                        if (Il2Cpp.ChestItems.s_banished != null && Il2Cpp.ChestItems.s_banished.Contains(candidate.Name)) continue;
+                        if (Il2Cpp.PlayerUnlocks.IsFullGameOnly(candidate.Name, false)
+                            || Il2Cpp.PlayerUnlocks.DemoBlocks(candidate.Name, false)) continue;
+                        if (candidate.MaxDropCopies > 0 && inventory.CountOf(candidate.Name) >= candidate.MaxDropCopies) continue;
+                        if (!(Il2Cpp.ChestItems.DropWeight(candidate) > 0f)) continue;
+                        selected = candidate;
+                        break;
+                    }
+                    if (selected == null)
+                    {
+                        _itemStatus = "Auto items: no eligible drops left";
+                        LoggerInstance.Warning(_itemStatus + "; have " + inventory.Owned.Count + ", target " + _itemTarget);
+                        _itemTarget = 0;
+                        return;
+                    }
+                    int before = inventory.Owned.Count;
+                    inventory.Grant(selected);
+                    if (inventory.Owned.Count <= before)
+                        throw new InvalidOperationException("Grant did not increase inventory: " + selected.Name);
+                }
+                _itemStatus = "Auto items: " + inventory.Owned.Count + " / " + _itemTarget;
+                if (inventory.Owned.Count >= _itemTarget)
+                {
+                    LoggerInstance.Msg(_itemStatus + " completed. Leaderboard acceptance is not guaranteed.");
+                    _itemTarget = 0;
+                }
+            }
+            catch (Exception e)
+            {
+                _itemTarget = 0;
+                _itemStatus = "Auto items: stopped (see log)";
+                LoggerInstance.Warning("ProcessAutoItems: " + e.Message);
+            }
+        }
+
         private void ChangeTimer(float seconds)
         {
             try
@@ -331,6 +418,7 @@ namespace GoNextTrainer
                 // Let the game's next Update refresh its timer text and threshold logic.
                 timer._lastSec = -1;
                 timer._lastMin = -1;
+                QueueAutoItems();
                 Flash("Map timer: " + timer.Elapsed.ToString("F0") + " sec");
             }
             catch (Exception e) { LoggerInstance.Warning("ChangeTimer: " + e.Message); }
@@ -341,6 +429,7 @@ namespace GoNextTrainer
             try
             {
                 if (!ActiveSoloRun()) { Flash("End run: not in a live solo run"); return; }
+                if (_itemTarget > 0) { Flash("Items are being added; press again when done"); return; }
                 var health = GameHealth.Instance;
                 var stats = SafeStats();
                 foreach (var toggle in _toggles) toggle.On = false;
@@ -366,6 +455,7 @@ namespace GoNextTrainer
                 // Use a wider intermediate to avoid overflow near Int32.MaxValue.
                 long next = (long)Il2Cpp.RunSession.Kills + amount;
                 Il2Cpp.RunSession.Kills = (int)Math.Max(0L, Math.Min(int.MaxValue, next));
+                QueueAutoItems();
                 Flash("Run kills: " + Il2Cpp.RunSession.Kills.ToString("N0"));
             }
             catch (Exception e) { LoggerInstance.Warning("ChangeKills: " + e.Message); }
@@ -479,7 +569,7 @@ namespace GoNextTrainer
         {
             if (!_menu) return;
 
-            int lines = _netBlocked ? 2 : (_toggles.Count + 10);
+            int lines = _netBlocked ? 2 : (_toggles.Count + 11);
             if (!_netBlocked && _autoKill.On) lines++;
             if (!string.IsNullOrEmpty(_flash) && Time.realtimeSinceStartup < _flashUntil) lines++;
             int h = 16 + (lines + 1) * LineH;
@@ -506,6 +596,7 @@ namespace GoNextTrainer
                 Line("Kills: [ / ] -/+ " + _killStep.ToString("N0"), ColHint);
                 Line("Timer: Ctrl+[ / ] -/+ " + _timeStep + " sec", ColHint);
                 Line("Hold Shift: step 1 kill / 1 sec", ColHint);
+                Line(_itemStatus, ColHint);
                 Line("Ctrl+Backspace: die / end run", ColWarn);
 
                 if (_autoKill.On)
