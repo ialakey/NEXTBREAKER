@@ -87,11 +87,28 @@ Press `Insert` to show or hide the overlay.
 | `F12` | full heal |
 | `]` | add 50,000 to the current run's kill count |
 | `[` | subtract 50,000 from the current run's kill count (minimum 0) |
+| `Ctrl` + `]` | advance the current map timer by 5 minutes |
+| `Ctrl` + `[` | rewind the current map timer by 5 minutes (minimum 0) |
+| `Ctrl` + `Backspace` | disable trainer toggles and end the run through lethal damage |
 
 Toggles and actions only do something during a run. Outside one the overlay reports
 "not in a run" and nothing breaks.
 
-### Kill counter (v1.4.1)
+### Timer and end-run controls (v1.5.0)
+
+`Ctrl` + `[` / `]` changes `GameTimer.Elapsed` by 300 seconds per press during a
+live solo run. Holding the key does not repeat. These combinations do not also change
+the kill counter. The timer on the current map is adjusted; banked time from earlier
+maps is left intact. Advancing time can trigger the game's difficulty thresholds;
+rewinding does not undo enemies or events that already happened.
+
+`Ctrl` + `Backspace` ends the current solo run through the game's damage/death flow.
+It switches off trainer toggles, GodMode, the current shield and invulnerability,
+clears pending revival, sets health to 1 and applies lethal damage with block bypass.
+If the game still prevents death, the overlay reports that instead of claiming success.
+Both controls are inactive outside a live run and in co-op.
+
+### Kill counter
 
 Use the `]` (increase) and `[` (decrease) keys during a solo run. Each press changes
 `RunSession.Kills` once; holding a key does not repeat the change. The overlay displays
@@ -100,7 +117,7 @@ These actions change the run counter directly without killing enemies or grantin
 gold or XP. They do not change the separate auto-kill tally and are disabled in co-op.
 
 To update, close the game, rebuild Release, and replace `Mods/GoNextTrainer.dll`.
-Version 1.4.1 has been build-checked against the local game assemblies; the new controls
+Version 1.5.0 has been build-checked against the local game assemblies; the new controls
 still need an in-game check.
 
 ### Auto-kill (`Del`)
