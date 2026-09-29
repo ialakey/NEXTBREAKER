@@ -26,6 +26,6 @@ foreach ($name in $files.Keys) {
 $settings = Join-Path $GameDir 'UserData\GoNextTrainer.steps.cfg'
 if (-not (Test-Path -LiteralPath $settings)) {
     New-Item -ItemType Directory -Path (Split-Path $settings) -Force | Out-Null
-    Set-Content -LiteralPath $settings -Value "KillStep=50000`nTimeStepSeconds=300" -Encoding ascii
+    Set-Content -LiteralPath $settings -Value "KillStep=50000`nTimeStepSeconds=300`nAutoItems=true" -Encoding ascii
 }
-Write-Host 'NEXTBREAKER 1.7.0 installed. Start the game: CoreModule will be repaired before mods load.'
+Write-Host 'NEXTBREAKER 1.8.0 installed. Start the game: CoreModule will be repaired before mods load.'
