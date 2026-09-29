@@ -55,6 +55,10 @@
       <HintPath>$(Il2Dir)\Il2CppGame.dll</HintPath>
       <Private>false</Private>
     </Reference>
+    <Reference Include="Il2CppSystem.Core">
+      <HintPath>$(Il2Dir)\Il2CppSystem.Core.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
     <Reference Include="Il2CppMirror">
       <HintPath>$(Il2Dir)\Il2CppMirror.dll</HintPath>
       <Private>false</Private>
