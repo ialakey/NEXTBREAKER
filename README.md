@@ -1,5 +1,22 @@
 # NEXTBREAKER
 
+## Version 1.7.0: 999B attack damage
+
+Press **B** to toggle 999,000,000,000 damage passed into enemy hit processing.
+This uses the `double` damage argument on `EnemyRobot.TakeDamage` overloads instead
+of overflowing the game's integer base-damage field. The game's later hit modifiers
+can still affect the final displayed damage. It does not damage the player.
+The mode is mutually exclusive with F2 mega damage and is disabled in co-op and by
+the end-run command. Enemy hits from other trainer actions also use this value while enabled.
+
+### Leaderboard results missing
+
+Enabled upload preferences do not guarantee acceptance. The game validates run duration,
+kills, level and collected items. Check `Player.log` under the game's LocalLow folder
+for `[Leaderboard] run NOT submitted` and `[Ranked] run not rated`; those lines explain
+why a run was rejected. Editing timer or kill counts does not update the rest of the
+run history and can fail these checks. This trainer does not bypass leaderboard validation.
+
 ## Version 1.6.0: automatic CoreModule repair and custom steps
 
 Install `GoNextCoreRepair.dll` into **Plugins/** and `GoNextTrainer.dll` into **Mods/**
@@ -97,6 +114,7 @@ Press `Insert` to show or hide the overlay.
 |---|---|---|
 | `F1` | Invincibility | `PlayerHealth.GodMode`, `incomingDamageMult = 0` |
 | `F2` | Mega damage | `damageMult`, `critChance = 1` |
+| `B` | 999B attack damage | sets positive enemy hit amounts to 999,000,000,000 |
 | `F3` | Infinite dash | refills `PlayerDashCharges` |
 | `F4` | Move speed | `moveSpeedMult` |
 | `F5` | Loot magnet | `pickupRange = 300` |
@@ -156,7 +174,7 @@ These actions change the run counter directly without killing enemies or grantin
 gold or XP. They do not change the separate auto-kill tally and are disabled in co-op.
 
 To update, close the game, rebuild Release, and replace `Mods/GoNextTrainer.dll`.
-Version 1.6.0 has been build-checked against the local game assemblies; the new controls
+Version 1.7.0 has been build-checked against the local game assemblies; the new controls
 still need an in-game check.
 
 ### Auto-kill (`Del`)
