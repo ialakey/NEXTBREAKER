@@ -11,7 +11,7 @@ using GameLevel = Il2Cpp.PlayerLevel;
 using GameDash = Il2Cpp.PlayerDashCharges;
 using GameEnemies = Il2Cpp.EnemyRegistry;
 
-[assembly: MelonInfo(typeof(GoNextTrainer.Trainer), "Go Next Trainer", "1.4.0", "local")]
+[assembly: MelonInfo(typeof(GoNextTrainer.Trainer), "Go Next Trainer", "1.4.1", "local")]
 [assembly: MelonGame("Go Next demo", "Go Next demo")]
 
 namespace GoNextTrainer
@@ -35,7 +35,7 @@ namespace GoNextTrainer
         public const int PageUp = 0x21, PageDown = 0x22;
         public const int Home = 0x24, End = 0x23;
         public const int Ctrl = 0x11;
-        public const int NumAdd = 0x6B, NumSubtract = 0x6D;
+        public const int LeftBracket = 0xDB, RightBracket = 0xDD;
 
         /// <summary>Fires once per press instead of every frame the key is held.</summary>
         public static bool Down(int vk)
@@ -182,8 +182,8 @@ namespace GoNextTrainer
             if (Keys.Down(Keys.F10)) GiveLevel();
             if (Keys.Down(Keys.F11)) KillAll();
             if (Keys.Down(Keys.F12)) FullHeal();
-            if (Keys.Down(Keys.NumAdd)) ChangeKills(50000);
-            if (Keys.Down(Keys.NumSubtract)) ChangeKills(-50000);
+            if (Keys.Down(Keys.RightBracket)) ChangeKills(50000);
+            if (Keys.Down(Keys.LeftBracket)) ChangeKills(-50000);
         }
 
         /// <summary>
@@ -391,7 +391,7 @@ namespace GoNextTrainer
                 Line("PgUp / PgDn — damage,  Ctrl + PgUp / PgDn — speed", ColText);
                 Line("[F9] +10000 gold     [F10] +1 level", ColText);
                 Line("[F11] kill all       [F12] full heal", ColText);
-                Line("[Num + / -] Run kills +/- 50,000", ColHint);
+                Line("Kills: [ -50,000    ] +50,000", ColHint);
 
                 if (_autoKill.On)
                     Line($"Auto-kill: {_autoKilled} killed  (every {AutoKillInterval}s, props skipped)", ColOn);
