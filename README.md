@@ -1,5 +1,25 @@
 # NEXTBREAKER
 
+## Version 1.8.0: automatic available items
+
+After changing kills or time with the bracket controls, the trainer asks the game
+for `Leaderboard.MinItemsFor(kills, totalRunTime)` and fills missing item copies via
+`ItemInventory.Grant`. It grants up to four copies per frame and shows progress in
+the overlay. Only unlocked, enabled, demo-available, non-banished items with positive
+drop weight and room under their copy limit are eligible. Inventory effects are applied
+by the game; no new unlocks are granted.
+
+Existing copies count toward the target. Reducing kills/time does not remove items.
+The queue stops outside a live solo run, on run change, in co-op, on failure or if the
+eligible pool is exhausted. Automatic targets are capped at 1,000 total copies to bound
+work. Ctrl+Backspace asks you to wait while a queue is active, then press it again.
+
+Automatic items default to on, including with an existing settings file. Add
+`AutoItems=false` to `UserData/GoNextTrainer.steps.cfg` to disable; settings reload
+on the next bracket press. No leaderboard upload is triggered by granting items.
+Other consistency checks (including level and kill rate) can still reject the run.
+Version 1.8.0 builds against the installed game; in-game granting still needs validation.
+
 ## Version 1.7.0: 999B attack damage
 
 Press **B** to toggle 999,000,000,000 damage passed into enemy hit processing.
@@ -174,7 +194,7 @@ These actions change the run counter directly without killing enemies or grantin
 gold or XP. They do not change the separate auto-kill tally and are disabled in co-op.
 
 To update, close the game, rebuild Release, and replace `Mods/GoNextTrainer.dll`.
-Version 1.7.0 has been build-checked against the local game assemblies; the new controls
+Version 1.8.0 has been build-checked against the local game assemblies; the new controls
 still need an in-game check.
 
 ### Auto-kill (`Del`)
