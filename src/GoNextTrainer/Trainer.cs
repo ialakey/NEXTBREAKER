@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.IO;
 using System.Globalization;
+using HarmonyLib;
 using MelonLoader;
 using UnityEngine;
 
@@ -13,7 +14,7 @@ using GameLevel = Il2Cpp.PlayerLevel;
 using GameDash = Il2Cpp.PlayerDashCharges;
 using GameEnemies = Il2Cpp.EnemyRegistry;
 
-[assembly: MelonInfo(typeof(GoNextTrainer.Trainer), "Go Next Trainer", "1.6.0", "local")]
+[assembly: MelonInfo(typeof(GoNextTrainer.Trainer), "Go Next Trainer", "1.7.0", "local")]
 [assembly: MelonGame("Go Next demo", "Go Next demo")]
 
 namespace GoNextTrainer
@@ -40,6 +41,7 @@ namespace GoNextTrainer
         public const int Shift = 0x10;
         public const int LeftBracket = 0xDB, RightBracket = 0xDD;
         public const int Backspace = 0x08;
+        public const int B = 0x42;
 
         /// <summary>Fires once per press instead of every frame the key is held.</summary>
         public static bool Down(int vk)
@@ -78,6 +80,9 @@ namespace GoNextTrainer
 
     public class Trainer : MelonMod
     {
+        internal const double Damage999B = 999_000_000_000d;
+        private static Trainer _instance;
+        private Toggle _damage999B;
         private Toggle _god, _damage, _dash, _speed, _magnet, _jumps, _luck;
         private Toggle _fireRate, _pierce, _lifesteal, _autoKill;
         private readonly List<Toggle> _toggles = new List<Toggle>();
@@ -126,9 +131,11 @@ namespace GoNextTrainer
 
         public override void OnInitializeMelon()
         {
+            _instance = this;
             LoadSteps();
             _god = Add("Invincibility", Keys.F1, "F1");
             _damage = Add("Mega damage", Keys.F2, "F2");
+            _damage999B = Add("Attack damage 999B", Keys.B, "B");
             _dash = Add("Infinite dash", Keys.F3, "F3");
             _speed = Add("Move speed", Keys.F4, "F4");
             _magnet = Add("Loot magnet", Keys.F5, "F5");
@@ -191,6 +198,8 @@ namespace GoNextTrainer
                 if (Keys.Down(t.Key))
                 {
                     t.On = !t.On;
+                    if (t == _damage999B && t.On) _damage.On = false;
+                    if (t == _damage && t.On) _damage999B.On = false;
                     if (t == _autoKill && t.On) { _autoKilled = 0; _autoKillNext = 0f; }
                     Flash(t.Name + (t.On ? ": ON" : ": OFF"));
                 }
@@ -287,6 +296,17 @@ namespace GoNextTrainer
 
         private static GameStats SafeStats() { try { return GameStats.Instance; } catch { return null; } }
         private static GameDash SafeDash() { try { return GameDash.Instance; } catch { return null; } }
+
+        internal static bool FixedAttackDamageEnabled()
+        {
+            try
+            {
+                return _instance?._damage999B?.On == true
+                    && !Il2CppMirror.NetworkClient.active && !Il2CppMirror.NetworkServer.active
+                    && GameHealth.Instance != null && !GameHealth.Instance.IsDead;
+            }
+            catch { return false; }
+        }
 
         private bool ActiveSoloRun()
         {
@@ -496,6 +516,25 @@ namespace GoNextTrainer
                 Line(_flash, ColHint);
 
             GUI.contentColor = ColText;
+        }
+    }
+
+    // Keep the amount as a double: 999 billion does not fit in the game's Int32 baseDamage.
+    // Cover each native overload, including weapons that call an overload directly.
+    [HarmonyPatch]
+    internal static class FixedAttackDamagePatch
+    {
+        private static IEnumerable<System.Reflection.MethodBase> TargetMethods()
+        {
+            yield return AccessTools.Method(typeof(Il2Cpp.EnemyRobot), "TakeDamage", new[] { typeof(double) });
+            yield return AccessTools.Method(typeof(Il2Cpp.EnemyRobot), "TakeDamage", new[] { typeof(double), typeof(bool) });
+            yield return AccessTools.Method(typeof(Il2Cpp.EnemyRobot), "TakeDamage", new[] { typeof(double), typeof(bool), typeof(bool) });
+        }
+
+        private static void Prefix(ref double __0)
+        {
+            if (__0 > 0d && !double.IsInfinity(__0) && Trainer.FixedAttackDamageEnabled())
+                __0 = Trainer.Damage999B;
         }
     }
 }
