@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
+using System.IO;
+using System.Globalization;
 using MelonLoader;
 using UnityEngine;
 
@@ -11,7 +13,7 @@ using GameLevel = Il2Cpp.PlayerLevel;
 using GameDash = Il2Cpp.PlayerDashCharges;
 using GameEnemies = Il2Cpp.EnemyRegistry;
 
-[assembly: MelonInfo(typeof(GoNextTrainer.Trainer), "Go Next Trainer", "1.5.0", "local")]
+[assembly: MelonInfo(typeof(GoNextTrainer.Trainer), "Go Next Trainer", "1.6.0", "local")]
 [assembly: MelonGame("Go Next demo", "Go Next demo")]
 
 namespace GoNextTrainer
@@ -35,6 +37,7 @@ namespace GoNextTrainer
         public const int PageUp = 0x21, PageDown = 0x22;
         public const int Home = 0x24, End = 0x23;
         public const int Ctrl = 0x11;
+        public const int Shift = 0x10;
         public const int LeftBracket = 0xDB, RightBracket = 0xDD;
         public const int Backspace = 0x08;
 
@@ -91,12 +94,39 @@ namespace GoNextTrainer
         private float _fireRateMult = 5f;
 
         private bool _menu = true;
+        private int _killStep = 50000;
+        private float _timeStep = 300f;
+        private string StepsPath => Path.Combine(MelonLoader.Utils.MelonEnvironment.UserDataDirectory, "GoNextTrainer.steps.cfg");
+
+        private void LoadSteps()
+        {
+            try
+            {
+                if (!File.Exists(StepsPath))
+                {
+                    Directory.CreateDirectory(Path.GetDirectoryName(StepsPath));
+                    File.WriteAllText(StepsPath, "KillStep=50000\nTimeStepSeconds=300\n");
+                }
+                foreach (string line in File.ReadAllLines(StepsPath))
+                {
+                    string[] pair = line.Split('=');
+                    if (pair.Length != 2) continue;
+                    if (pair[0].Trim() == "KillStep" && int.TryParse(pair[1].Trim(), out int kills) && kills > 0)
+                        _killStep = kills;
+                    if (pair[0].Trim() == "TimeStepSeconds" && float.TryParse(pair[1].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out float seconds)
+                        && seconds > 0f && !float.IsInfinity(seconds) && seconds <= 86400f)
+                        _timeStep = seconds;
+                }
+            }
+            catch (Exception e) { LoggerInstance.Warning("Step settings: " + e.Message); }
+        }
         private bool _netBlocked;
         private string _flash = "";
         private float _flashUntil;
 
         public override void OnInitializeMelon()
         {
+            LoadSteps();
             _god = Add("Invincibility", Keys.F1, "F1");
             _damage = Add("Mega damage", Keys.F2, "F2");
             _dash = Add("Infinite dash", Keys.F3, "F3");
@@ -185,11 +215,15 @@ namespace GoNextTrainer
             if (Keys.Down(Keys.F12)) FullHeal();
             if (Keys.Down(Keys.RightBracket))
             {
-                if (ctrl) ChangeTimer(300f); else ChangeKills(50000);
+                LoadSteps();
+                bool fine = Keys.IsDown(Keys.Shift);
+                if (ctrl) ChangeTimer(fine ? 1f : _timeStep); else ChangeKills(fine ? 1 : _killStep);
             }
             if (Keys.Down(Keys.LeftBracket))
             {
-                if (ctrl) ChangeTimer(-300f); else ChangeKills(-50000);
+                LoadSteps();
+                bool fine = Keys.IsDown(Keys.Shift);
+                if (ctrl) ChangeTimer(fine ? -1f : -_timeStep); else ChangeKills(fine ? -1 : -_killStep);
             }
             if (Keys.Down(Keys.Backspace) && ctrl) EndRun();
         }
@@ -425,7 +459,7 @@ namespace GoNextTrainer
         {
             if (!_menu) return;
 
-            int lines = _netBlocked ? 2 : (_toggles.Count + 9);
+            int lines = _netBlocked ? 2 : (_toggles.Count + 10);
             if (!_netBlocked && _autoKill.On) lines++;
             if (!string.IsNullOrEmpty(_flash) && Time.realtimeSinceStartup < _flashUntil) lines++;
             int h = 16 + (lines + 1) * LineH;
@@ -449,8 +483,9 @@ namespace GoNextTrainer
                 Line("PgUp / PgDn — damage,  Ctrl + PgUp / PgDn — speed", ColText);
                 Line("[F9] +10000 gold     [F10] +1 level", ColText);
                 Line("[F11] kill all       [F12] full heal", ColText);
-                Line("Kills: [ -50,000    ] +50,000", ColHint);
-                Line("Timer: Ctrl+[ -5m   Ctrl+] +5m", ColHint);
+                Line("Kills: [ / ] -/+ " + _killStep.ToString("N0"), ColHint);
+                Line("Timer: Ctrl+[ / ] -/+ " + _timeStep + " sec", ColHint);
+                Line("Hold Shift: step 1 kill / 1 sec", ColHint);
                 Line("Ctrl+Backspace: die / end run", ColWarn);
 
                 if (_autoKill.On)
